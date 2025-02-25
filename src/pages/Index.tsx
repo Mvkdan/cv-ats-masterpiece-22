@@ -1,12 +1,16 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { Card } from "@/components/ui/card";
-import { Download, Plus, Trash2 } from "lucide-react";
+import { Download, Plus, Trash2, Eye, Save } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
+import CVPreview from "@/components/CVPreview";
+import { saveToLocalStorage, loadFromLocalStorage } from "@/utils/storage";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 
 interface Experience {
   id: string;
@@ -69,6 +73,45 @@ const CVGenerator = () => {
     certificates: [] as Certificate[],
     languages: [] as Language[],
   });
+
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const savedData = loadFromLocalStorage();
+    if (savedData) {
+      setCvData(savedData);
+      toast({
+        title: "Données restaurées",
+        description: "Vos données précédentes ont été chargées avec succès.",
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    const saveTimeout = setTimeout(() => {
+      saveToLocalStorage(cvData);
+    }, 1000);
+
+    return () => clearTimeout(saveTimeout);
+  }, [cvData]);
+
+  useEffect(() => {
+    const sections = {
+      contact: !!cvData.fullName && !!cvData.email,
+      summary: !!cvData.summary,
+      experience: cvData.experience.length > 0,
+      education: cvData.education.length > 0,
+      skills: !!cvData.skills,
+      projects: cvData.projects.length > 0,
+      certificates: cvData.certificates.length > 0,
+      languages: cvData.languages.length > 0,
+    };
+
+    const completedSections = Object.values(sections).filter(Boolean).length;
+    const totalSections = Object.keys(sections).length;
+    setProgress((completedSections / totalSections) * 100);
+  }, [cvData]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -146,29 +189,55 @@ const CVGenerator = () => {
   };
 
   const handleSave = () => {
+    saveToLocalStorage(cvData);
     toast({
       title: "Succès !",
       description: "Votre CV a été enregistré.",
     });
   };
 
-  const languageLevels = [
-    "Débutant",
-    "Intermédiaire",
-    "Avancé",
-    "Courant",
-    "Bilingue",
-    "Langue maternelle"
-  ];
+  const handleExportPDF = async () => {
+    const element = document.getElementById('cv-preview');
+    if (!element) return;
+
+    try {
+      const canvas = await html2canvas(element);
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF();
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save('mon-cv.pdf');
+
+      toast({
+        title: "Succès !",
+        description: "Votre CV a été téléchargé au format PDF.",
+      });
+    } catch (error) {
+      toast({
+        title: "Erreur",
+        description: "Une erreur est survenue lors de l'export du CV.",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 animate-fadeIn">
+    <div className="min-h-screen bg-gray-50 py-8">
       <div className="container mx-auto px-4">
+        <div className="mb-8 space-y-2">
+          <div className="flex justify-between text-sm text-gray-600">
+            <span>Progression du CV</span>
+            <span>{Math.round(progress)}%</span>
+          </div>
+          <Progress value={progress} className="h-2" />
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Section Prévisualisation */}
-          <Card className="p-8 bg-white shadow-lg h-fit sticky top-8">
+          <Card className="p-8 bg-white shadow-lg h-fit sticky top-8" id="cv-preview">
             <div className="space-y-6">
-              {/* En-tête */}
               <div className="text-center border-b pb-6">
                 <h1 className="text-3xl font-bold text-gray-900">{cvData.fullName || "Votre Nom"}</h1>
                 <p className="text-lg text-gray-600 mt-2">{cvData.jobTitle || "Titre du Poste"}</p>
@@ -180,7 +249,6 @@ const CVGenerator = () => {
                 </div>
               </div>
 
-              {/* Résumé */}
               {cvData.summary && (
                 <section>
                   <h2 className="text-xl font-semibold mb-3 text-gray-800">Résumé Professionnel</h2>
@@ -188,7 +256,6 @@ const CVGenerator = () => {
                 </section>
               )}
 
-              {/* Expérience */}
               {cvData.experience.length > 0 && (
                 <section>
                   <h2 className="text-xl font-semibold mb-3 text-gray-800">Expérience Professionnelle</h2>
@@ -211,7 +278,6 @@ const CVGenerator = () => {
                 </section>
               )}
 
-              {/* Formation */}
               {cvData.education.length > 0 && (
                 <section>
                   <h2 className="text-xl font-semibold mb-3 text-gray-800">Formation</h2>
@@ -235,7 +301,6 @@ const CVGenerator = () => {
                 </section>
               )}
 
-              {/* Projets */}
               {cvData.projects.length > 0 && (
                 <section>
                   <h2 className="text-xl font-semibold mb-3 text-gray-800">Projets</h2>
@@ -257,7 +322,6 @@ const CVGenerator = () => {
                 </section>
               )}
 
-              {/* Certifications */}
               {cvData.certificates.length > 0 && (
                 <section>
                   <h2 className="text-xl font-semibold mb-3 text-gray-800">Certifications</h2>
@@ -277,7 +341,6 @@ const CVGenerator = () => {
                 </section>
               )}
 
-              {/* Compétences */}
               {cvData.skills && (
                 <section>
                   <h2 className="text-xl font-semibold mb-3 text-gray-800">Compétences</h2>
@@ -285,7 +348,6 @@ const CVGenerator = () => {
                 </section>
               )}
 
-              {/* Langues */}
               {cvData.languages.length > 0 && (
                 <section>
                   <h2 className="text-xl font-semibold mb-3 text-gray-800">Langues</h2>
@@ -302,8 +364,34 @@ const CVGenerator = () => {
             </div>
           </Card>
 
-          {/* Section Formulaire */}
           <div className="space-y-6">
+            <div className="flex justify-end space-x-4 mb-6">
+              <Button 
+                onClick={() => setIsPreviewOpen(true)} 
+                variant="outline"
+                className="bg-white"
+              >
+                <Eye className="mr-2 h-4 w-4" />
+                Prévisualiser
+              </Button>
+              <Button 
+                onClick={handleSave}
+                variant="outline"
+                className="bg-white"
+              >
+                <Save className="mr-2 h-4 w-4" />
+                Sauvegarder
+              </Button>
+              <Button 
+                onClick={handleExportPDF}
+                variant="default"
+                className="bg-primary hover:bg-primary/90"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Télécharger PDF
+              </Button>
+            </div>
+
             <Tabs defaultValue="contact" className="w-full">
               <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8">
                 <TabsTrigger value="contact">Contact</TabsTrigger>
@@ -316,7 +404,6 @@ const CVGenerator = () => {
                 <TabsTrigger value="languages">Langues</TabsTrigger>
               </TabsList>
 
-              {/* Section Contact */}
               <TabsContent value="contact" className="space-y-4 mt-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
@@ -371,7 +458,6 @@ const CVGenerator = () => {
                 </div>
               </TabsContent>
 
-              {/* Section Résumé */}
               <TabsContent value="summary" className="space-y-4 mt-4">
                 <Textarea
                   placeholder="Écrivez un bref résumé professionnel..."
@@ -382,7 +468,6 @@ const CVGenerator = () => {
                 />
               </TabsContent>
 
-              {/* Section Expérience */}
               <TabsContent value="experience" className="space-y-6 mt-4">
                 {cvData.experience.map((exp, index) => (
                   <Card key={exp.id} className="p-4 space-y-4">
@@ -456,7 +541,6 @@ const CVGenerator = () => {
                 </Button>
               </TabsContent>
 
-              {/* Section Formation */}
               <TabsContent value="education" className="space-y-6 mt-4">
                 {cvData.education.map((edu, index) => (
                   <Card key={edu.id} className="p-4 space-y-4">
@@ -539,7 +623,6 @@ const CVGenerator = () => {
                 </Button>
               </TabsContent>
 
-              {/* Section Projets */}
               <TabsContent value="projects" className="space-y-6 mt-4">
                 {cvData.projects.map((project, index) => (
                   <Card key={project.id} className="p-4 space-y-4">
@@ -602,7 +685,6 @@ const CVGenerator = () => {
                 </Button>
               </TabsContent>
 
-              {/* Section Certifications */}
               <TabsContent value="certificates" className="space-y-6 mt-4">
                 {cvData.certificates.map((cert, index) => (
                   <Card key={cert.id} className="p-4 space-y-4">
@@ -657,7 +739,6 @@ const CVGenerator = () => {
                 </Button>
               </TabsContent>
 
-              {/* Section Compétences */}
               <TabsContent value="skills" className="space-y-4 mt-4">
                 <Textarea
                   placeholder="Listez vos compétences techniques, outils et technologies..."
@@ -668,7 +749,6 @@ const CVGenerator = () => {
                 />
               </TabsContent>
 
-              {/* Section Langues */}
               <TabsContent value="languages" className="space-y-6 mt-4">
                 {cvData.languages.map((lang, index) => (
                   <Card key={lang.id} className="p-4 space-y-4">
@@ -718,16 +798,15 @@ const CVGenerator = () => {
                 </Button>
               </TabsContent>
             </Tabs>
-
-            <div className="flex justify-end space-x-4">
-              <Button onClick={handleSave} variant="default" className="bg-primary hover:bg-primary/90">
-                <Download className="mr-2 h-4 w-4" />
-                Enregistrer le CV
-              </Button>
-            </div>
           </div>
         </div>
       </div>
+
+      <CVPreview 
+        isOpen={isPreviewOpen}
+        onClose={() => setIsPreviewOpen(false)}
+        cvData={cvData}
+      />
     </div>
   );
 };
