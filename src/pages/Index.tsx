@@ -12,6 +12,14 @@ import { saveToLocalStorage, loadFromLocalStorage } from "@/utils/storage";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 
+const languageLevels = [
+  "Débutant",
+  "Intermédiaire",
+  "Avancé",
+  "Bilingue",
+  "Langue Maternelle"
+];
+
 interface Experience {
   id: string;
   title: string;
