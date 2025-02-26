@@ -1,13 +1,13 @@
+
 import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { Card } from "@/components/ui/card";
-import { Download, Plus, Trash2, Eye, Save } from "lucide-react";
+import { Download, Plus, Trash2, Save } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import CVPreview from "@/components/CVPreview";
 import { saveToLocalStorage, loadFromLocalStorage } from "@/utils/storage";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
@@ -19,6 +19,16 @@ const languageLevels = [
   "Bilingue",
   "Langue Maternelle"
 ];
+
+interface Skill {
+  id: string;
+  name: string;
+}
+
+interface ProjectTechnology {
+  id: string;
+  name: string;
+}
 
 interface Experience {
   id: string;
@@ -45,8 +55,7 @@ interface Project {
   id: string;
   name: string;
   description: string;
-  technologies: string;
-  url: string;
+  technologies: ProjectTechnology[];
 }
 
 interface Certificate {
@@ -74,7 +83,7 @@ const CVGenerator = () => {
     github: "",
     portfolio: "",
     summary: "",
-    skills: "",
+    skills: [] as Skill[],
     experience: [] as Experience[],
     education: [] as Education[],
     projects: [] as Project[],
@@ -82,12 +91,29 @@ const CVGenerator = () => {
     languages: [] as Language[],
   });
 
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [newSkill, setNewSkill] = useState("");
+  const [newTechnology, setNewTechnology] = useState("");
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
     const savedData = loadFromLocalStorage();
     if (savedData) {
+      // Assurer la rétrocompatibilité avec l'ancien format des compétences
+      if (typeof savedData.skills === 'string') {
+        savedData.skills = savedData.skills.split(',').map((skill: string) => ({
+          id: Date.now().toString() + Math.random(),
+          name: skill.trim()
+        })).filter((skill: Skill) => skill.name);
+      }
+      // Assurer la rétrocompatibilité avec l'ancien format des technologies de projet
+      savedData.projects = savedData.projects.map((project: any) => ({
+        ...project,
+        technologies: Array.isArray(project.technologies) ? project.technologies : 
+          project.technologies.split(',').map((tech: string) => ({
+            id: Date.now().toString() + Math.random(),
+            name: tech.trim()
+          })).filter((tech: ProjectTechnology) => tech.name)
+      }));
       setCvData(savedData);
       toast({
         title: "Données restaurées",
@@ -110,7 +136,7 @@ const CVGenerator = () => {
       summary: !!cvData.summary,
       experience: cvData.experience.length > 0,
       education: cvData.education.length > 0,
-      skills: !!cvData.skills,
+      skills: cvData.skills.length > 0,
       projects: cvData.projects.length > 0,
       certificates: cvData.certificates.length > 0,
       languages: cvData.languages.length > 0,
@@ -126,6 +152,54 @@ const CVGenerator = () => {
     setCvData((prev) => ({
       ...prev,
       [name]: value,
+    }));
+  };
+
+  const addSkill = () => {
+    if (!newSkill.trim()) return;
+    setCvData((prev) => ({
+      ...prev,
+      skills: [...prev.skills, { id: Date.now().toString(), name: newSkill.trim() }],
+    }));
+    setNewSkill("");
+  };
+
+  const removeSkill = (skillId: string) => {
+    setCvData((prev) => ({
+      ...prev,
+      skills: prev.skills.filter((skill) => skill.id !== skillId),
+    }));
+  };
+
+  const addTechnologyToProject = (projectId: string) => {
+    if (!newTechnology.trim()) return;
+    setCvData((prev) => ({
+      ...prev,
+      projects: prev.projects.map((project) => {
+        if (project.id === projectId) {
+          return {
+            ...project,
+            technologies: [...project.technologies, { id: Date.now().toString(), name: newTechnology.trim() }],
+          };
+        }
+        return project;
+      }),
+    }));
+    setNewTechnology("");
+  };
+
+  const removeTechnologyFromProject = (projectId: string, techId: string) => {
+    setCvData((prev) => ({
+      ...prev,
+      projects: prev.projects.map((project) => {
+        if (project.id === projectId) {
+          return {
+            ...project,
+            technologies: project.technologies.filter((tech) => tech.id !== techId),
+          };
+        }
+        return project;
+      }),
     }));
   };
 
@@ -167,8 +241,7 @@ const CVGenerator = () => {
         id: Date.now().toString(),
         name: "",
         description: "",
-        technologies: "",
-        url: "",
+        technologies: [],
       }],
     }));
   };
@@ -340,14 +413,29 @@ const CVGenerator = () => {
                       <div key={project.id} className="border-b pb-4">
                         <h3 className="font-medium text-gray-900">{project.name}</h3>
                         <p className="text-gray-600 mt-1">{project.description}</p>
-                        <p className="text-gray-500 mt-1">Technologies : {project.technologies}</p>
-                        {project.url && (
-                          <a href={project.url} target="_blank" rel="noopener noreferrer" 
-                             className="text-blue-600 hover:text-blue-800 text-sm mt-1 block">
-                            Voir le projet
-                          </a>
+                        {project.technologies.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {project.technologies.map((tech) => (
+                              <span key={tech.id} className="text-sm text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                                {tech.name}
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {cvData.skills.length > 0 && (
+                <section>
+                  <h2 className="text-xl font-semibold mb-3 text-gray-800">Compétences</h2>
+                  <div className="flex flex-wrap gap-2">
+                    {cvData.skills.map((skill) => (
+                      <span key={skill.id} className="bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm">
+                        {skill.name}
+                      </span>
                     ))}
                   </div>
                 </section>
@@ -372,13 +460,6 @@ const CVGenerator = () => {
                 </section>
               )}
 
-              {cvData.skills && (
-                <section>
-                  <h2 className="text-xl font-semibold mb-3 text-gray-800">Compétences</h2>
-                  <p className="text-gray-600">{cvData.skills}</p>
-                </section>
-              )}
-
               {cvData.languages.length > 0 && (
                 <section>
                   <h2 className="text-xl font-semibold mb-3 text-gray-800">Langues</h2>
@@ -397,14 +478,6 @@ const CVGenerator = () => {
 
           <div className="space-y-6">
             <div className="flex justify-end space-x-4 mb-6">
-              <Button 
-                onClick={() => setIsPreviewOpen(true)} 
-                variant="outline"
-                className="bg-white"
-              >
-                <Eye className="mr-2 h-4 w-4" />
-                Prévisualiser
-              </Button>
               <Button 
                 onClick={handleSave}
                 variant="outline"
@@ -429,8 +502,8 @@ const CVGenerator = () => {
                 <TabsTrigger value="summary">Résumé</TabsTrigger>
                 <TabsTrigger value="experience">Expérience</TabsTrigger>
                 <TabsTrigger value="education">Formation</TabsTrigger>
-                <TabsTrigger value="skills">Compétences</TabsTrigger>
                 <TabsTrigger value="projects">Projets</TabsTrigger>
+                <TabsTrigger value="skills">Compétences</TabsTrigger>
                 <TabsTrigger value="certificates">Certifications</TabsTrigger>
                 <TabsTrigger value="languages">Langues</TabsTrigger>
               </TabsList>
@@ -676,24 +749,40 @@ const CVGenerator = () => {
                           setCvData((prev) => ({ ...prev, projects: newProjects }));
                         }}
                       />
-                      <Input
-                        placeholder="Technologies Utilisées"
-                        value={project.technologies}
-                        onChange={(e) => {
-                          const newProjects = [...cvData.projects];
-                          newProjects[index].technologies = e.target.value;
-                          setCvData((prev) => ({ ...prev, projects: newProjects }));
-                        }}
-                      />
-                      <Input
-                        placeholder="URL du Projet"
-                        value={project.url}
-                        onChange={(e) => {
-                          const newProjects = [...cvData.projects];
-                          newProjects[index].url = e.target.value;
-                          setCvData((prev) => ({ ...prev, projects: newProjects }));
-                        }}
-                      />
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Ajouter une technologie"
+                            value={newTechnology}
+                            onChange={(e) => setNewTechnology(e.target.value)}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                addTechnologyToProject(project.id);
+                              }
+                            }}
+                          />
+                          <Button 
+                            variant="outline" 
+                            onClick={() => addTechnologyToProject(project.id)}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {project.technologies.map((tech) => (
+                            <span key={tech.id} className="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded text-sm">
+                              {tech.name}
+                              <button
+                                onClick={() => removeTechnologyFromProject(project.id, tech.id)}
+                                className="text-gray-500 hover:text-red-500"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                     <Button
                       variant="destructive"
@@ -716,130 +805,31 @@ const CVGenerator = () => {
                 </Button>
               </TabsContent>
 
-              <TabsContent value="certificates" className="space-y-6 mt-4">
-                {cvData.certificates.map((cert, index) => (
-                  <Card key={cert.id} className="p-4 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Input
-                        placeholder="Nom de la Certification"
-                        value={cert.name}
-                        onChange={(e) => {
-                          const newCerts = [...cvData.certificates];
-                          newCerts[index].name = e.target.value;
-                          setCvData((prev) => ({ ...prev, certificates: newCerts }));
-                        }}
-                      />
-                      <Input
-                        placeholder="Organisme"
-                        value={cert.issuer}
-                        onChange={(e) => {
-                          const newCerts = [...cvData.certificates];
-                          newCerts[index].issuer = e.target.value;
-                          setCvData((prev) => ({ ...prev, certificates: newCerts }));
-                        }}
-                      />
-                      <Input
-                        placeholder="Date d'Obtention"
-                        type="month"
-                        value={cert.date}
-                        onChange={(e) => {
-                          const newCerts = [...cvData.certificates];
-                          newCerts[index].date = e.target.value;
-                          setCvData((prev) => ({ ...prev, certificates: newCerts }));
-                        }}
-                      />
-                    </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => {
-                        setCvData((prev) => ({
-                          ...prev,
-                          certificates: prev.certificates.filter((_, i) => i !== index),
-                        }));
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Supprimer
-                    </Button>
-                  </Card>
-                ))}
-                <Button onClick={addCertificate} variant="outline" className="w-full">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Ajouter une Certification
-                </Button>
-              </TabsContent>
-
               <TabsContent value="skills" className="space-y-4 mt-4">
-                <Textarea
-                  placeholder="Listez vos compétences techniques, outils et technologies..."
-                  name="skills"
-                  value={cvData.skills}
-                  onChange={handleInputChange}
-                  className="min-h-[200px]"
-                />
-              </TabsContent>
-
-              <TabsContent value="languages" className="space-y-6 mt-4">
-                {cvData.languages.map((lang, index) => (
-                  <Card key={lang.id} className="p-4 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Input
-                        placeholder="Langue"
-                        value={lang.name}
-                        onChange={(e) => {
-                          const newLangs = [...cvData.languages];
-                          newLangs[index].name = e.target.value;
-                          setCvData((prev) => ({ ...prev, languages: newLangs }));
-                        }}
-                      />
-                      <select
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                        value={lang.level}
-                        onChange={(e) => {
-                          const newLangs = [...cvData.languages];
-                          newLangs[index].level = e.target.value;
-                          setCvData((prev) => ({ ...prev, languages: newLangs }));
-                        }}
-                      >
-                        <option value="">Sélectionnez un niveau</option>
-                        {languageLevels.map((level) => (
-                          <option key={level} value={level}>{level}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => {
-                        setCvData((prev) => ({
-                          ...prev,
-                          languages: prev.languages.filter((_, i) => i !== index),
-                        }));
+                <div className="space-y-4">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Ajouter une compétence"
+                      value={newSkill}
+                      onChange={(e) => setNewSkill(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addSkill();
+                        }
                       }}
+                    />
+                    <Button 
+                      variant="outline" 
+                      onClick={addSkill}
                     >
-                      <Trash2 className="h-4 w-4" />
-                      Supprimer
+                      <Plus className="h-4 w-4" />
                     </Button>
-                  </Card>
-                ))}
-                <Button onClick={addLanguage} variant="outline" className="w-full">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Ajouter une Langue
-                </Button>
-              </TabsContent>
-            </Tabs>
-          </div>
-        </div>
-      </div>
-
-      <CVPreview 
-        isOpen={isPreviewOpen}
-        onClose={() => setIsPreviewOpen(false)}
-        cvData={cvData}
-      />
-    </div>
-  );
-};
-
-export default CVGenerator;
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {cvData.skills.map((skill) => (
+                      <span key={skill.id} className="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded text-sm">
+                        {skill.name}
+                        <button
+                          onClick={() => removeSkill(skill.id)}
+                          className
